@@ -35,34 +35,34 @@ $ vpncli disconnect
 
 ## Install
 
-Replace `YOUR_GITHUB_USERNAME` with the account that hosts the repository.
+Replace `sushantadhkr` with the account that hosts the repository.
 
 With pipx (recommended):
 
 ```sh
-pipx install "vpncli[gui] @ git+https://github.com/YOUR_GITHUB_USERNAME/vpncli.git"
+pipx install "vpncli[gui] @ git+https://github.com/sushantadhkr/vpncli.git"
 ```
 
 CLI only, without the tray dependencies:
 
 ```sh
-pipx install "git+https://github.com/YOUR_GITHUB_USERNAME/vpncli.git"
+pipx install "git+https://github.com/sushantadhkr/vpncli.git"
 ```
 
 One-line installers:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/vpncli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/sushantadhkr/vpncli/main/install.sh | sh
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/vpncli/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/sushantadhkr/vpncli/main/install.ps1 | iex
 ```
 
 From a local clone:
 
 ```sh
-git clone https://github.com/YOUR_GITHUB_USERNAME/vpncli.git
+git clone https://github.com/sushantadhkr/vpncli.git
 cd vpncli
 pipx install ".[gui]"
 ```
@@ -162,7 +162,7 @@ Set `VPNCLI_HOME` to use another folder, and `VPNCLI_OPENVPN` to point at a spec
 ## Development
 
 ```sh
-git clone https://github.com/YOUR_GITHUB_USERNAME/vpncli.git
+git clone https://github.com/sushantadhkr/vpncli.git
 cd vpncli
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[gui]"

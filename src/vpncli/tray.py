@@ -221,7 +221,7 @@ def main() -> int:
     if not dependencies_available():
         print(
             "The tray needs extra packages. Install them with:\n"
-            "  pipx install 'vpncli[gui] @ git+https://github.com/YOUR_GITHUB_USERNAME/vpncli.git'\n"
+            "  pipx install 'vpncli[gui] @ git+https://github.com/sushantadhkr/vpncli.git'\n"
             "or, inside an existing environment:\n"
             "  pip install 'vpncli[gui]'",
             file=sys.stderr,

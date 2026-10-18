@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-REPO="${VPNCLI_REPO:-https://github.com/YOUR_GITHUB_USERNAME/vpncli.git}"
+REPO="${VPNCLI_REPO:-https://github.com/sushantadhkr/vpncli.git}"
 SPEC="vpncli[gui] @ git+${REPO}"
 if [ "${VPNCLI_NO_GUI:-0}" = "1" ]; then
   SPEC="vpncli @ git+${REPO}"

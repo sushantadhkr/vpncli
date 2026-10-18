@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$Repo = if ($env:VPNCLI_REPO) { $env:VPNCLI_REPO } else { "https://github.com/YOUR_GITHUB_USERNAME/vpncli.git" }
+$Repo = if ($env:VPNCLI_REPO) { $env:VPNCLI_REPO } else { "https://github.com/sushantadhkr/vpncli.git" }
 $Spec = if ($env:VPNCLI_NO_GUI -eq "1") { "vpncli @ git+$Repo" } else { "vpncli[gui] @ git+$Repo" }
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw "git is required" }

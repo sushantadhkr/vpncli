@@ -34,8 +34,8 @@ vpncli = "vpncli.cli:main"
 vpncli-tray = "vpncli.tray:main"
 
 [project.urls]
-Homepage = "https://github.com/YOUR_GITHUB_USERNAME/vpncli"
-Issues = "https://github.com/YOUR_GITHUB_USERNAME/vpncli/issues"
+Homepage = "https://github.com/sushantadhkr/vpncli"
+Issues = "https://github.com/sushantadhkr/vpncli/issues"
 
 [tool.setuptools.dynamic]
 version = { attr = "vpncli.__version__" }

@@ -333,16 +333,21 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    try:
-        app = TrayApp()
-    except Exception as exc:
-        print("could not start the tray icon: %s" % exc, file=sys.stderr)
-        return 1
     # First run: put the icon and the menu bar entry in place, quietly.
     try:
         assets.register()
     except Exception:
         pass
+    # Hand over to the app bundle so macOS shows vpncli rather than Python
+    # in the menu bar, Activity Monitor and Login Items.
+    if sys.platform == "darwin" and not os.environ.get("VPNCLI_TRAY_LAUNCHED"):
+        if assets.launch_macos_app():
+            return 0
+    try:
+        app = TrayApp()
+    except Exception as exc:
+        print("could not start the tray icon: %s" % exc, file=sys.stderr)
+        return 1
     app.run()
     return 0
 

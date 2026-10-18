@@ -67,3 +67,39 @@ class InstallTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class MacosHandoverTests(unittest.TestCase):
+    def make_bundle(self, root: Path, script: str, executable: bool = True) -> Path:
+        bundle = root / "Applications" / "vpncli.app"
+        launcher = bundle / "Contents" / "MacOS" / "vpncli-tray"
+        launcher.parent.mkdir(parents=True)
+        launcher.write_text(script, encoding="utf-8")
+        launcher.chmod(0o755 if executable else 0o644)
+        return bundle
+
+    def test_missing_bundle_is_not_handed_over(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with mock.patch.object(assets, "MACOS_APPLICATIONS", (home / "Applications",)), \
+                 mock.patch.object(assets.sys, "platform", "darwin"):
+                self.assertIsNone(assets.macos_app())
+
+    def test_bundle_with_live_interpreter_is_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            interpreter = home / "venv" / "bin" / "python"
+            interpreter.parent.mkdir(parents=True)
+            interpreter.write_text("", encoding="utf-8")
+            bundle = self.make_bundle(home, '#!/bin/sh\nexec "%s" -m vpncli tray\n' % interpreter)
+            with mock.patch.object(assets, "MACOS_APPLICATIONS", (home / "Applications",)), \
+                 mock.patch.object(assets.sys, "platform", "darwin"):
+                self.assertEqual(assets.macos_app(), bundle)
+
+    def test_bundle_pointing_at_a_dead_interpreter_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            bundle = self.make_bundle(home, '#!/bin/sh\nexec "/gone/python" -m vpncli tray\n')
+            with mock.patch.object(assets, "MACOS_APPLICATIONS", (home / "Applications",)), \
+                 mock.patch.object(assets.sys, "platform", "darwin"):
+                self.assertIsNone(assets.macos_app())
+            self.assertTrue(bundle.is_dir())

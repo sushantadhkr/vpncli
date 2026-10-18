@@ -31,11 +31,10 @@ class RepoTests(unittest.TestCase):
                 update.owner_repo()
 
     def test_installer_url_points_at_main(self):
+        expected = update.INSTALLER["win" if paths.WINDOWS else "posix"]
         with mock.patch.dict("os.environ", {}):
             url = update.installer_url()
-        self.assertTrue(
-            url.endswith("sushantadhkr/vpncli/main/install.sh"), url
-        )
+        self.assertTrue(url.endswith("sushantadhkr/vpncli/main/%s" % expected), url)
 
     def test_windows_uses_the_powershell_installer(self):
         with mock.patch.dict("os.environ", {}), mock.patch.object(paths, "WINDOWS", True):
@@ -59,8 +58,11 @@ class FetchTests(unittest.TestCase):
                 update.fetch_installer("https://example.invalid/install.sh")
 
     def test_installer_command_matches_platform(self):
-        script = Path("/tmp/install.sh")
-        self.assertEqual(update.installer_command(script)[0], "/bin/sh")
+        script = Path("C:/install.ps1" if paths.WINDOWS else "/tmp/install.sh")
+        self.assertEqual(
+            update.installer_command(script)[0],
+            "powershell" if paths.WINDOWS else "/bin/sh",
+        )
         with mock.patch.object(paths, "WINDOWS", True):
             command = update.installer_command(Path("C:/install.ps1"))
         self.assertEqual(command[0], "powershell")

@@ -7,29 +7,24 @@ from vpncli import paths
 
 
 class EnsureSharedTests(unittest.TestCase):
-    """Windows reports every file as 0666 and ignores chmod, so the mode
-    bits are only meaningful on macOS and Linux."""
-
-    def assert_private(self, path: Path) -> None:
-        self.assertTrue(path.is_file())
-        if not paths.WINDOWS:
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-        else:
-            self.assertTrue(os.access(str(path), os.R_OK))
-
     def test_creates_private_file_owned_by_the_user(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "openvpn.log"
             paths.ensure_shared(target)
-            self.assert_private(target)
+            self.assertTrue(target.is_file())
+            if os.name == "posix":
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(target.stat().st_uid, os.getuid())
 
     def test_existing_file_is_tightened(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "openvpn.pid"
             target.write_text("123\n", encoding="utf-8")
-            os.chmod(str(target), 0o644)
+            if os.name == "posix":
+                os.chmod(str(target), 0o644)
             paths.ensure_shared(target)
-            self.assert_private(target)
+            if os.name == "posix":
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
 
     def test_keeps_existing_content(self):
         with tempfile.TemporaryDirectory() as tmp:

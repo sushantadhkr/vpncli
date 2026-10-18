@@ -231,6 +231,24 @@ def _refresh_desktop_database() -> None:
 # Windows
 
 
+def windows_target() -> Tuple[str, str]:
+    """The command that starts the tray without a console window.
+
+    ``gui-scripts`` already builds ``vpncli-tray.exe`` with the GUI
+    subsystem, so using it shows vpncli's own icon and no black terminal.
+    ``pythonw.exe`` is the fallback; plain ``python.exe`` would flash a
+    console window, which is exactly what a menu bar app must not do.
+    """
+    folder = Path(sys.executable).parent
+    launcher = folder / ("%s-tray.exe" % APP_NAME)
+    if launcher.is_file():
+        return str(launcher), ""
+    windowless = folder / "pythonw.exe"
+    if windowless.is_file():
+        return str(windowless), "-m %s tray" % APP_NAME
+    return sys.executable, "-m %s tray" % APP_NAME
+
+
 def install_windows() -> Optional[Path]:
     if not paths.WINDOWS:
         return None
@@ -247,17 +265,18 @@ def install_windows() -> Optional[Path]:
         return None
     WINDOWS_START_MENU.mkdir(parents=True, exist_ok=True)
     shortcut = WINDOWS_START_MENU / ("%s tray.lnk" % APP_NAME)
+    target, arguments = windows_target()
     script = (
         "$s = (New-Object -ComObject WScript.Shell).CreateShortcut('%s');"
         "$s.TargetPath = '%s';"
-        "$s.Arguments = '-m %s tray';"
+        "$s.Arguments = '%s';"
         "$s.WorkingDirectory = '%s';"
         "$s.IconLocation = '%s,0';"
         "$s.Description = 'OpenVPN status in the system tray';"
         "$s.Save()" % (
             str(shortcut),
-            sys.executable,
-            APP_NAME,
+            target,
+            arguments,
             str(paths.data_dir()),
             str(icon_target),
         )

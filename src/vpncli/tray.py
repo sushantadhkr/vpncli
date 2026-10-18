@@ -192,10 +192,16 @@ class TrayApp:
             enabled=False,
         )
         yield pystray.Menu.SEPARATOR
-        yield item("Uninstall and delete all data", self.on_uninstall(True))
-        yield item("Uninstall but keep profiles", self.on_uninstall(False))
+        yield item("Uninstall and delete all data", self.uninstall_action(True))
+        yield item("Uninstall but keep profiles", self.uninstall_action(False))
 
-    def on_uninstall(self, purge: bool) -> None:
+    def uninstall_action(self, purge: bool):
+        """Build the callback for one uninstall entry.
+
+        This must return the callback rather than run it: pystray rebuilds
+        the menu every time the state changes, so anything with a side
+        effect here would fire over and over.
+        """
         def action() -> None:
             args = ["uninstall", "--yes"] + ([] if purge else ["--keep-data"])
             self.busy = True
@@ -216,7 +222,7 @@ class TrayApp:
                 except Exception:
                     pass
 
-        threading.Thread(target=action, daemon=True).start()
+        return action
 
     def profile_items(self) -> Iterator[object]:
         names = self.store.names()

@@ -151,7 +151,7 @@ The tray draws its own status shield, but a real application also needs artwork 
 |---|---|
 | macOS | `~/Applications/vpncli.app` with `Info.plist` and `vpncli.icns`. `LSUIElement` is set, so it runs in the menu bar with no Dock icon and no window. Add it to **Login Items** to start it at boot. |
 | Linux | `~/.local/share/applications/vpncli-tray.desktop` plus hicolor icons in `~/.local/share/icons/hicolor/*/apps/`, then `update-desktop-database`. Appears in the application launcher. |
-| Windows | `vpncli tray.lnk` in the Start Menu with the `.ico` applied, so it shows your icon rather than Python's. |
+| Windows | `vpncli tray.lnk` in the Start Menu with the `.ico` applied, so it shows your icon rather than Python's. It points at the windowless `vpncli-tray.exe` (or `pythonw.exe`), never `python.exe`, so no console window appears. |
 
 It runs automatically the first time `vpncli tray` starts, and again whenever the installed Python changes (a reinstall into a different virtual environment), so the launcher never points at an interpreter that no longer exists. `vpncli register --force` redoes it by hand, and `vpncli doctor` reports whether it is in place.
 

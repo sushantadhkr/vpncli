@@ -323,6 +323,32 @@ class TrayApp:
         self.icon.run(self.setup)
 
 
+def claim_instance() -> bool:
+    """Take the single tray slot, or report that one is already running.
+
+    Without this, launching the tray from the app bundle and from the
+    command line would leave two icons in the menu bar fighting over the
+    same log and state file.
+    """
+    paths.ensure_data_dirs()
+    lock = paths.run_dir() / "tray.pid"
+    try:
+        owner = int(lock.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        owner = 0
+    if owner and owner != os.getpid() and runtime.pid_alive(owner):
+        return False
+    try:
+        lock.write_text("%d\n" % os.getpid(), encoding="utf-8")
+    except OSError:
+        return True
+    return True
+
+
+def release_instance() -> None:
+    paths.remove_quietly(paths.run_dir() / "tray.pid")
+
+
 def main() -> int:
     if not dependencies_available():
         print(
@@ -343,12 +369,19 @@ def main() -> int:
     if sys.platform == "darwin" and not os.environ.get("VPNCLI_TRAY_LAUNCHED"):
         if assets.launch_macos_app():
             return 0
+    if not claim_instance():
+        print("vpncli tray is already running in the menu bar", file=sys.stderr)
+        return 0
     try:
         app = TrayApp()
     except Exception as exc:
+        release_instance()
         print("could not start the tray icon: %s" % exc, file=sys.stderr)
         return 1
-    app.run()
+    try:
+        app.run()
+    finally:
+        release_instance()
     return 0
 
 

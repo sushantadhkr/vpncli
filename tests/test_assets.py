@@ -1,3 +1,4 @@
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -103,3 +104,52 @@ class MacosHandoverTests(unittest.TestCase):
                  mock.patch.object(assets.sys, "platform", "darwin"):
                 self.assertIsNone(assets.macos_app())
             self.assertTrue(bundle.is_dir())
+
+
+class LauncherMarkerTests(unittest.TestCase):
+    """The bundle launcher must always carry the hand-over marker.
+
+    A launcher left over from a version that predates the marker starts a
+    child that hands straight back to the bundle, so the tray exits at once
+    and nothing is left running.
+    """
+
+    def test_launcher_always_sets_the_marker(self):
+        script = assets.macos_launcher_text()
+        self.assertIn("VPNCLI_TRAY_LAUNCHED=1", script)
+        self.assertIn("-m vpncli tray", script)
+
+    def test_stale_launcher_is_rewritten_on_handover(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            applications = home / "Applications"
+            bundle = applications / "vpncli.app"
+            launcher = bundle / "Contents" / "MacOS" / "vpncli-tray"
+            launcher.parent.mkdir(parents=True)
+            launcher.write_text(
+                '#!/bin/sh\nexec "%s" -m vpncli tray\n' % sys.executable, encoding="utf-8"
+            )
+            launcher.chmod(0o755)
+            with mock.patch.object(assets, "MACOS_APPLICATIONS", (applications,)), \
+                 mock.patch.object(assets.sys, "platform", "darwin"), \
+                 mock.patch.object(assets, "_macos_target", return_value=bundle), \
+                 mock.patch("subprocess.Popen"):
+                assets.launch_macos_app()
+            self.assertIn("VPNCLI_TRAY_LAUNCHED=1", launcher.read_text(encoding="utf-8"))
+
+    def test_current_launcher_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            applications = home / "Applications"
+            bundle = applications / "vpncli.app"
+            launcher = bundle / "Contents" / "MacOS" / "vpncli-tray"
+            launcher.parent.mkdir(parents=True)
+            launcher.write_text(assets.macos_launcher_text(), encoding="utf-8")
+            launcher.chmod(0o644)
+            with mock.patch.object(assets, "MACOS_APPLICATIONS", (applications,)), \
+                 mock.patch.object(assets.sys, "platform", "darwin"), \
+                 mock.patch.object(assets, "_macos_target", return_value=bundle), \
+                 mock.patch("subprocess.Popen"):
+                assets.launch_macos_app()
+            # A launcher that is current keeps whatever mode it had.
+            self.assertEqual(launcher.stat().st_mode & 0o777, 0o644)

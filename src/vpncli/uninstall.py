@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from . import paths
+from . import assets, paths
 
 PACKAGE = "vpncli"
 WAIT_SECONDS = 2
@@ -132,6 +132,35 @@ def plan(home: Optional[Path] = None) -> List[Step]:
     return steps
 
 
+def _register_removal() -> List[List[str]]:
+    """Commands that delete the app icon and launcher, if they were created."""
+    home = paths.invoking_home()
+    commands: List[List[str]] = []
+    if paths.WINDOWS:
+        shortcut = assets.WINDOWS_START_MENU / ("%s tray.lnk" % PACKAGE)
+        if shortcut.exists():
+            commands.append(["cmd", "/c", "del", "/f", "/q", str(shortcut)])
+        return commands
+
+    if sys.platform == "darwin":
+        for folder in (home / "Applications", Path("/Applications")):
+            bundle = folder / ("%s.app" % PACKAGE)
+            if bundle.exists() and os.access(str(folder), os.W_OK):
+                commands.append(_remove_tree(bundle))
+                break
+        return commands
+
+    entry = home / ".local" / "share" / "applications" / ("%s-tray.desktop" % PACKAGE)
+    if entry.exists():
+        commands.append(_remove_tree(entry))
+    theme = home / ".local" / "share" / "icons" / "hicolor"
+    for size in (16, 24, 32, 48, 64, 128, 256, 512):
+        icon = theme / ("%dx%d" % (size, size)) / "apps" / ("%s.png" % PACKAGE)
+        if icon.exists():
+            commands.append(_remove_tree(icon))
+    return commands
+
+
 def data_dir() -> Path:
     return paths.data_dir()
 
@@ -187,11 +216,14 @@ def _defer(commands: List[List[str]]) -> bool:
     return True
 
 
-def schedule(steps: List[Step]) -> bool:
-    return _defer([command for _, command in steps])
+def schedule(steps: List[Step], extra: Optional[List[List[str]]] = None) -> bool:
+    commands = list(extra or []) + [command for _, command in steps]
+    return _defer(commands)
 
 
-def run(home: Optional[Path] = None, keep_data: bool = False) -> Tuple[List[Step], Optional[Path], bool]:
+def run(
+    home: Optional[Path] = None, keep_data: bool = False
+) -> Tuple[List[Step], Optional[Path], bool]:
     """Plan, delete local data and schedule package removal.
 
     Returns ``(steps, removed_data_dir, scheduled)``.
@@ -200,4 +232,4 @@ def run(home: Optional[Path] = None, keep_data: bool = False) -> Tuple[List[Step
     removed: Optional[Path] = None
     if not keep_data:
         removed = remove_data()
-    return steps, removed, schedule(steps)
+    return steps, removed, schedule(steps, _register_removal())

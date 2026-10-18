@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from . import __version__, netutil, paths, privilege, runtime, settings, uninstall
+from . import __version__, assets, netutil, paths, privilege, runtime, settings, uninstall
 from .profiles import Profile, ProfileError, ProfileStore, slugify
 from .runtime import Status, VpnError
 
@@ -532,6 +532,17 @@ def cmd_doctor(args: argparse.Namespace, store: ProfileStore) -> int:
 
     report("data directory", True, str(paths.data_dir()))
     report("profiles", True, "%d stored" % len(store.names()))
+    if assets.has_artwork():
+        report("app icon", True, str(assets.icon_png()))
+        if sys.platform == "darwin":
+            launcher = str(Path.home() / "Applications" / "vpncli.app")
+        elif sys.platform.startswith("win"):
+            launcher = "Start Menu: vpncli tray.lnk"
+        else:
+            launcher = str(assets.LINUX_APPLICATIONS / "vpncli-tray.desktop")
+        report("app registration", assets.is_registered(), launcher, required=False)
+    else:
+        report("app icon", False, "artwork missing from the installation", required=False)
     gui_ready = all(
         importlib.util.find_spec(name) is not None for name in ("pystray", "PIL")
     )
@@ -544,6 +555,21 @@ def cmd_tray(args: argparse.Namespace, store: ProfileStore) -> int:
     from . import tray
 
     return tray.main()
+
+
+def cmd_register(args: argparse.Namespace, store: ProfileStore) -> int:
+    if not assets.has_artwork():
+        return fail("the application icon is missing from this installation")
+    try:
+        created = assets.register(force=args.force)
+    except (OSError, assets.RegisterError) as exc:
+        return fail("could not register the application: %s" % exc)
+    if created is None:
+        good("already registered; nothing to do")
+    else:
+        good("registered %s" % created)
+    print("  %-9s %s" % ("icon", assets.icon_png()))
+    return 0
 
 
 def cmd_uninstall(args: argparse.Namespace, store: ProfileStore) -> int:
@@ -694,6 +720,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = commands.add_parser("tray", help="start the system tray status icon")
     sub.set_defaults(func=cmd_tray)
+
+    sub = commands.add_parser(
+        "register", help="install the app icon and menu-bar/launcher entry"
+    )
+    sub.add_argument("-f", "--force", action="store_true", help="register again even if already done")
+    sub.set_defaults(func=cmd_register)
 
     sub = commands.add_parser(
         "uninstall", help="remove the vpncli command, the tray icon and local data"

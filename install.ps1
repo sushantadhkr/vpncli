@@ -18,4 +18,5 @@ if (-not (Get-Command openvpn -ErrorAction SilentlyContinue)) {
     Write-Host "OpenVPN was not found. Install it with: winget install OpenVPNTechnologies.OpenVPN"
 }
 Write-Host "vpncli installed. Open a new terminal and run: vpncli --help"
+Write-Host "To add the app icon and tray entry, run: vpncli register"
 Write-Host "To remove it later: vpncli uninstall"

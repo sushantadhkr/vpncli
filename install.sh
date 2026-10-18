@@ -36,6 +36,7 @@ fi
 
 if command -v vpncli >/dev/null 2>&1; then
   vpncli doctor || true
+  vpncli register || true
 fi
 printf 'vpncli installed. Run: vpncli --help\n'
 printf 'To remove it later: vpncli uninstall\n'

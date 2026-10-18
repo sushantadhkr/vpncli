@@ -106,6 +106,7 @@ vpncli disconnect
 | `latency [NAME...]` | Measure latency to profile servers |
 | `doctor` | Check OpenVPN, privileges, tun device and tray dependencies |
 | `tray` | Start the system tray icon |
+| `register` | Install the app icon and menu bar / launcher entry (`--force`) |
 | `uninstall` | Remove the CLI, the tray icon and local data (`--keep-data`, `--yes`) |
 | `paths` | Print where vpncli keeps its files |
 
@@ -125,13 +126,31 @@ Linux notes: GNOME needs the AppIndicator extension, and Debian-based systems ma
 
 To start the tray at login, add `vpncli tray` (or the `vpncli-tray` launcher on Windows) to your login items, autostart entries or Startup folder.
 
+## App icon and registration
+
+```sh
+vpncli register
+```
+
+The tray draws its own status shield, but a real application also needs artwork on disk and a launcher the operating system knows about. `vpncli register` does both, using the icon shipped inside the package (`src/vpncli/assets/`, built from `assets/vpncli.svg`):
+
+| Platform | What is created |
+|---|---|
+| macOS | `~/Applications/vpncli.app` with `Info.plist` and `vpncli.icns`. `LSUIElement` is set, so it runs in the menu bar with no Dock icon and no window. Add it to **Login Items** to start it at boot. |
+| Linux | `~/.local/share/applications/vpncli-tray.desktop` plus hicolor icons in `~/.local/share/icons/hicolor/*/apps/`, then `update-desktop-database`. Appears in the application launcher. |
+| Windows | `vpncli tray.lnk` in the Start Menu with the `.ico` applied, so it shows your icon rather than Python's. |
+
+It runs automatically the first time `vpncli tray` starts, and again whenever the installed Python changes (a reinstall into a different virtual environment), so the launcher never points at an interpreter that no longer exists. `vpncli register --force` redoes it by hand, and `vpncli doctor` reports whether it is in place.
+
+Run it once, then forget about it. If you add `vpncli uninstall`, the launcher, the desktop entry and the Start Menu shortcut are removed with everything else.
+
 ## Uninstalling
 
 ```sh
 vpncli uninstall
 ```
 
-This removes the `vpncli` command and the tray icon together, because both are entry points of the same package. It works out how the program was installed (pipx, the private virtual environment created by `install.sh`, or a plain `pip install`), disconnects any active tunnel, and deletes your data directory: profiles, saved credentials, settings and logs.
+This removes the `vpncli` command and the tray icon together, because both are entry points of the same package. It works out how the program was installed (pipx, the private virtual environment created by `install.sh`, or a plain `pip install`), disconnects any active tunnel, deletes the app registration described above, and removes your data directory: profiles, saved credentials, settings and logs.
 
 Pass `--keep-data` to uninstall the program but keep your profiles and credentials, or `-y` to skip the confirmation. The actual file removal is handed to a detached process and happens a moment after the command exits, so it never has to delete the interpreter that is running it.
 

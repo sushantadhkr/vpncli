@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import Dict, Iterator, Optional
 
-from . import netutil, paths, privilege, runtime
+from . import assets, netutil, paths, privilege, runtime
 from .profiles import ProfileStore
 
 COLORS = {
@@ -274,6 +274,11 @@ def main() -> int:
     except Exception as exc:
         print("could not start the tray icon: %s" % exc, file=sys.stderr)
         return 1
+    # First run: put the icon and the menu bar entry in place, quietly.
+    try:
+        assets.register()
+    except Exception:
+        pass
     app.run()
     return 0
 

@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import unittest
@@ -152,4 +153,5 @@ class LauncherMarkerTests(unittest.TestCase):
                  mock.patch("subprocess.Popen"):
                 assets.launch_macos_app()
             # A launcher that is current keeps whatever mode it had.
-            self.assertEqual(launcher.stat().st_mode & 0o777, 0o644)
+            if os.name == "posix":
+                self.assertEqual(launcher.stat().st_mode & 0o777, 0o644)

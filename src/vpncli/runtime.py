@@ -412,6 +412,8 @@ def connect(
     auth_path, temporary = _resolve_auth(profile, credentials)
     paths.remove_quietly(paths.log_file())
     paths.remove_quietly(paths.pid_file())
+    paths.ensure_shared(paths.log_file())
+    paths.ensure_shared(paths.pid_file())
     command = build_command(
         openvpn, profile, auth_path, paths.log_file(), paths.pid_file(), True, extra
     )

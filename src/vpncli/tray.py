@@ -116,7 +116,49 @@ class TrayApp:
         yield item("Open log", self.on_open_log)
         yield item("Open profiles folder", self.on_open_profiles)
         yield pystray.Menu.SEPARATOR
+        yield pystray.Menu.SEPARATOR
+        yield item(
+            "Uninstall vpncli...",
+            pystray.Menu(self.uninstall_items),
+            enabled=lambda entry: not self.busy,
+        )
         yield item("Quit", self.on_quit)
+
+    def uninstall_items(self) -> Iterator[object]:
+        pystray = self.pystray
+        item = pystray.MenuItem
+        yield item(
+            lambda entry: "Removes the tray icon, the vpncli command and %s"
+            % paths.data_dir(),
+            None,
+            enabled=False,
+        )
+        yield pystray.Menu.SEPARATOR
+        yield item("Uninstall and delete all data", self.on_uninstall(True))
+        yield item("Uninstall but keep profiles", self.on_uninstall(False))
+
+    def on_uninstall(self, purge: bool) -> None:
+        def action() -> None:
+            args = ["uninstall", "--yes"] + ([] if purge else ["--keep-data"])
+            self.busy = True
+            self.icon.update_menu()
+            try:
+                code, output = privilege.run_elevated(args)
+                if code != 0:
+                    print("uninstall failed: %s" % last_line(output), file=sys.stderr)
+                else:
+                    print(output)
+            finally:
+                # Leave the icon up until the removal has actually been asked
+                # for, otherwise the tray would exit before the prompt appears.
+                self.busy = False
+                self.stop_event.set()
+                try:
+                    self.icon.stop()
+                except Exception:
+                    pass
+
+        threading.Thread(target=action, daemon=True).start()
 
     def profile_items(self) -> Iterator[object]:
         names = self.store.names()

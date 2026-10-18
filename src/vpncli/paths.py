@@ -117,6 +117,29 @@ def write_private(path: Path, text: str) -> None:
     give_to_invoker(path)
 
 
+def ensure_shared(path: Path) -> None:
+    """Pre-create a file that openvpn will later open for writing.
+
+    When openvpn runs elevated it does so with sudo's umask (0077), so any
+    file it creates itself becomes 0600 root-owned and can never be read
+    back by this process. Creating the file first means openvpn reuses the
+    existing file and inherits our mode and owner. Root can write to it
+    regardless of mode, so this works with or without elevation, and it
+    never loosens permissions beyond what the caller asked for.
+    """
+    try:
+        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    except OSError:
+        return
+    os.close(fd)
+    give_to_invoker(path)
+    if not WINDOWS:
+        try:
+            os.chmod(str(path), 0o600)
+        except OSError:
+            pass
+
+
 def remove_quietly(path: Path) -> None:
     try:
         path.unlink()

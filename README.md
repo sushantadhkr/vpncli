@@ -106,6 +106,7 @@ vpncli disconnect
 | `latency [NAME...]` | Measure latency to profile servers |
 | `doctor` | Check OpenVPN, privileges, tun device and tray dependencies |
 | `tray` | Start the system tray icon |
+| `uninstall` | Remove the CLI, the tray icon and local data (`--keep-data`, `--yes`) |
 | `paths` | Print where vpncli keeps its files |
 
 Profile names can be abbreviated to any unique prefix, so `vpncli connect nl` works when only one profile starts with `nl`.
@@ -116,13 +117,25 @@ Profile names can be abbreviated to any unique prefix, so `vpncli connect nl` wo
 vpncli tray
 ```
 
-The icon sits in the macOS menu bar, the Windows notification area or the Linux system tray. It shows a grey shield when disconnected, amber while connecting and green with a tick when connected. The menu lists every profile under **Connect** and offers Disconnect, Reconnect, Show public IP, Open log and Open profiles folder.
+The icon sits in the macOS menu bar, the Windows notification area or the Linux system tray. It shows a grey shield when disconnected, amber while connecting and green with a tick when connected. The menu lists every profile under **Connect** and offers Disconnect, Reconnect, Show public IP, Open log, Open profiles folder and, at the bottom, Uninstall.
 
 Connecting needs administrator rights, so the tray asks for them through the native prompt of each system: the macOS password dialog, polkit (`pkexec`) on Linux, and the UAC prompt on Windows. Profiles that need a username and password must have them saved first with `vpncli creds`, because the tray cannot ask for them.
 
 Linux notes: GNOME needs the AppIndicator extension, and Debian-based systems may need `sudo apt install gir1.2-ayatanaappindicator3-0.1`. KDE, XFCE and most other desktops work out of the box.
 
 To start the tray at login, add `vpncli tray` (or the `vpncli-tray` launcher on Windows) to your login items, autostart entries or Startup folder.
+
+## Uninstalling
+
+```sh
+vpncli uninstall
+```
+
+This removes the `vpncli` command and the tray icon together, because both are entry points of the same package. It works out how the program was installed (pipx, the private virtual environment created by `install.sh`, or a plain `pip install`), disconnects any active tunnel, and deletes your data directory: profiles, saved credentials, settings and logs.
+
+Pass `--keep-data` to uninstall the program but keep your profiles and credentials, or `-y` to skip the confirmation. The actual file removal is handed to a detached process and happens a moment after the command exits, so it never has to delete the interpreter that is running it.
+
+The tray menu has the same two choices under **Uninstall vpncli...** at the bottom: **Uninstall and delete all data** and **Uninstall but keep profiles**.
 
 ## How it works
 

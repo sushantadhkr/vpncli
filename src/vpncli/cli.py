@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from . import __version__, netutil, paths, privilege, runtime, settings
+from . import __version__, netutil, paths, privilege, runtime, settings, uninstall
 from .profiles import Profile, ProfileError, ProfileStore, slugify
 from .runtime import Status, VpnError
 
@@ -546,6 +546,40 @@ def cmd_tray(args: argparse.Namespace, store: ProfileStore) -> int:
     return tray.main()
 
 
+def cmd_uninstall(args: argparse.Namespace, store: ProfileStore) -> int:
+    try:
+        steps = uninstall.plan()
+    except uninstall.UninstallError as exc:
+        return fail(str(exc))
+    data = uninstall.data_dir()
+    print("This will remove the vpncli command, the tray icon and:")
+    for label, _ in steps:
+        print("  - %s" % label)
+    if args.keep_data:
+        print("  - nothing else (data kept at %s)" % data)
+    else:
+        print("  - profiles, saved credentials, settings and logs in %s" % data)
+    if not args.yes and not confirm("Uninstall vpncli?"):
+        print("cancelled")
+        return 1
+    session = runtime.active_session()
+    if session is not None:
+        runtime.disconnect(interactive=is_interactive(args))
+    try:
+        _, removed, scheduled = uninstall.run(keep_data=args.keep_data)
+    except uninstall.UninstallError as exc:
+        return fail(str(exc))
+    if removed is not None:
+        good("removed %s" % removed)
+    else:
+        print("kept %s" % data)
+    if scheduled:
+        good("vpncli and the tray icon will be removed as soon as this command exits")
+    else:
+        warn("could not schedule the removal; remove it with: pipx uninstall %s" % uninstall.PACKAGE)
+    return 0
+
+
 def cmd_paths(args: argparse.Namespace, store: ProfileStore) -> int:
     print("data:      %s" % paths.data_dir())
     print("profiles:  %s" % paths.profiles_dir())
@@ -660,6 +694,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = commands.add_parser("tray", help="start the system tray status icon")
     sub.set_defaults(func=cmd_tray)
+
+    sub = commands.add_parser(
+        "uninstall", help="remove the vpncli command, the tray icon and local data"
+    )
+    sub.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation")
+    sub.add_argument(
+        "--keep-data", action="store_true", help="remove the program but keep profiles and credentials"
+    )
+    sub.set_defaults(func=cmd_uninstall)
 
     sub = commands.add_parser("paths", help="show where vpncli stores its data")
     sub.set_defaults(func=cmd_paths)

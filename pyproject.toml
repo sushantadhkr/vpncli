@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vpncli"
+dynamic = ["version"]
+description = "Cross-platform OpenVPN command line client with a system tray status icon"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "vpncli contributors" }]
+keywords = ["openvpn", "vpn", "cli", "tray", "ovpn"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Networking",
+]
+dependencies = []
+
+[project.optional-dependencies]
+gui = ["pystray>=0.19.4", "Pillow>=9.0"]
+
+[project.scripts]
+vpncli = "vpncli.cli:main"
+
+[project.gui-scripts]
+vpncli-tray = "vpncli.tray:main"
+
+[project.urls]
+Homepage = "https://github.com/YOUR_GITHUB_USERNAME/vpncli"
+Issues = "https://github.com/YOUR_GITHUB_USERNAME/vpncli/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "vpncli.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

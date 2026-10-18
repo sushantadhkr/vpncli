@@ -106,6 +106,7 @@ vpncli disconnect
 | `latency [NAME...]` | Measure latency to profile servers |
 | `doctor` | Check OpenVPN, privileges, tun device and tray dependencies |
 | `tray` | Start the system tray icon |
+| `update` | Update vpncli and the tray icon in place from GitHub (`--check`, `--no-gui`) |
 | `register` | Install the app icon and menu bar / launcher entry (`--force`) |
 | `uninstall` | Remove the CLI, the tray icon and local data (`--keep-data`, `--yes`) |
 | `paths` | Print where vpncli keeps its files |
@@ -125,6 +126,18 @@ Connecting needs administrator rights, so the tray asks for them through the nat
 Linux notes: GNOME needs the AppIndicator extension, and Debian-based systems may need `sudo apt install gir1.2-ayatanaappindicator3-0.1`. KDE, XFCE and most other desktops work out of the box.
 
 To start the tray at login, add `vpncli tray` (or the `vpncli-tray` launcher on Windows) to your login items, autostart entries or Startup folder.
+
+## Updating
+
+```sh
+vpncli update
+```
+
+Every supported install layout is produced by the install script, so an update simply runs that script again: it disconnects, downloads `install.sh` (or `install.ps1` on Windows) over HTTPS from the repository, runs it, and re-registers the app icon so the menu bar launcher keeps pointing at the right interpreter. Your profiles, credentials and settings are never touched.
+
+`vpncli update --check` shows which installer would be used and stops there. `--no-gui` updates without the tray dependencies, and `--no-disconnect` updates while a tunnel is still up. `VPNCLI_REPO` points it at a fork, in either URL form (`https://github.com/me/vpncli.git` or `git@github.com:me/vpncli.git`).
+
+The tray has **Check for updates...** above Uninstall: it shows the installer URL, asks for confirmation in the native dialog (macOS `display dialog`, Windows MessageBox, `zenity` on Linux) and only then downloads and installs.
 
 ## App icon and registration
 
@@ -154,7 +167,7 @@ This removes the `vpncli` command and the tray icon together, because both are e
 
 Pass `--keep-data` to uninstall the program but keep your profiles and credentials, or `-y` to skip the confirmation. The actual file removal is handed to a detached process and happens a moment after the command exits, so it never has to delete the interpreter that is running it.
 
-The tray menu has the same two choices under **Uninstall vpncli...** at the bottom: **Uninstall and delete all data** and **Uninstall but keep profiles**.
+The tray menu has **Check for updates...** and **Uninstall vpncli...** near the bottom. The uninstall submenu offers **Uninstall and delete all data** and **Uninstall but keep profiles**.
 
 ## How it works
 

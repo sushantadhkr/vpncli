@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import Dict, Iterator, Optional
 
-from . import assets, netutil, paths, privilege, runtime
+from . import assets, netutil, paths, privilege, runtime, update
 from .profiles import ProfileStore
 
 COLORS = {
@@ -51,6 +52,36 @@ def open_path(path: Path) -> None:
 
 def dependencies_available() -> bool:
     return all(importlib.util.find_spec(name) is not None for name in ("pystray", "PIL"))
+
+
+def confirm_update() -> bool:
+    """Ask before running the installer, using the native dialog of each system."""
+    question = "Download and install the latest vpncli?"
+    try:
+        if sys.platform == "darwin":
+            script = 'display dialog "%s" with title "vpncli update" buttons {"Cancel", "Update"} default button "Update"' % question
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return result.returncode == 0
+        if sys.platform.startswith("win"):
+            import ctypes
+
+            answer = ctypes.windll.user32.MessageBoxW(0, question, "vpncli update", 0x04 | 0x20)
+            return answer == 6  # IDYES
+        zenity = shutil.which("zenity")
+        if zenity:
+            result = subprocess.run(
+                [zenity, "--question", "--title", "vpncli update", question],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return result.returncode == 0
+    except Exception:
+        pass
+    return False
 
 
 def last_line(text: str) -> str:
@@ -117,12 +148,39 @@ class TrayApp:
         yield item("Open profiles folder", self.on_open_profiles)
         yield pystray.Menu.SEPARATOR
         yield pystray.Menu.SEPARATOR
+        yield item("Check for updates...", self.on_update)
         yield item(
             "Uninstall vpncli...",
             pystray.Menu(self.uninstall_items),
             enabled=lambda entry: not self.busy,
         )
         yield item("Quit", self.on_quit)
+
+    def on_update(self) -> None:
+        def worker() -> None:
+            try:
+                url, _ = update.update(dry_run=True)
+                message = "Latest installer: %s" % url
+            except Exception as exc:
+                message = last_line(str(exc))
+            self.notify("vpncli", message)
+            if not confirm_update():
+                return
+            self.busy = True
+            self.icon.update_menu()
+            try:
+                update.update()
+                message = "vpncli has been updated"
+            except Exception as exc:
+                message = last_line(str(exc))
+            finally:
+                self.busy = False
+            self.notify("vpncli", message)
+            # The environment was just replaced, so keep the icon open rather
+            # than sitting on files that no longer exist.
+            self.refresh()
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def uninstall_items(self) -> Iterator[object]:
         pystray = self.pystray

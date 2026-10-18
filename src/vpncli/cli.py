@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from . import __version__, assets, netutil, paths, privilege, runtime, settings, uninstall
+from . import __version__, assets, netutil, paths, privilege, runtime, settings, uninstall, update
 from .profiles import Profile, ProfileError, ProfileStore, slugify
 from .runtime import Status, VpnError
 
@@ -557,6 +557,26 @@ def cmd_tray(args: argparse.Namespace, store: ProfileStore) -> int:
     return tray.main()
 
 
+def cmd_update(args: argparse.Namespace, store: ProfileStore) -> int:
+    session = runtime.active_session()
+    if session is not None and args.disconnect:
+        print("Disconnecting from %s ..." % session.profile)
+        runtime.disconnect(interactive=is_interactive(args))
+    try:
+        url, output = update.update(no_gui=args.no_gui, dry_run=args.check)
+    except update.UpdateError as exc:
+        return fail(str(exc))
+    if args.check:
+        print("update runs the installer from %s" % url)
+        return 0
+    print("ran %s" % url)
+    for line in (output or "").splitlines():
+        if line.strip():
+            print("  %s" % line.strip())
+    good("vpncli updated; run: vpncli --version")
+    return 0
+
+
 def cmd_register(args: argparse.Namespace, store: ProfileStore) -> int:
     if not assets.has_artwork():
         return fail("the application icon is missing from this installation")
@@ -720,6 +740,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = commands.add_parser("tray", help="start the system tray status icon")
     sub.set_defaults(func=cmd_tray)
+
+    sub = commands.add_parser(
+        "update", help="update vpncli and the tray icon in place from GitHub"
+    )
+    sub.add_argument("--check", action="store_true", help="show which installer would be used and stop")
+    sub.add_argument("--no-gui", action="store_true", help="update without the tray dependencies")
+    sub.add_argument("--no-disconnect", dest="disconnect", action="store_false", help="update while connected")
+    sub.set_defaults(func=cmd_update, disconnect=True)
 
     sub = commands.add_parser(
         "register", help="install the app icon and menu-bar/launcher entry"

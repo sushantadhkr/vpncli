@@ -482,6 +482,12 @@ def release_instance() -> None:
 
 
 def main() -> int:
+    try:
+        import faulthandler
+
+        faulthandler.enable()
+    except Exception:
+        pass
     if not dependencies_available():
         print(
             "The tray needs extra packages. Install them with:\n"

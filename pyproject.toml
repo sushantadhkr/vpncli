@@ -29,6 +29,7 @@ gui = ["pystray>=0.19.4", "Pillow>=9.0"]
 
 [project.scripts]
 vpncli = "vpncli.cli:main"
+vpncli-helper = "vpncli.helper:main"
 
 [project.gui-scripts]
 vpncli-tray = "vpncli.tray:main"

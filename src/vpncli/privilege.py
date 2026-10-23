@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import shutil
 import subprocess
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from . import paths
 
@@ -41,7 +42,61 @@ def _applescript_quote(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _helper_socket_path() -> Optional[str]:
+    for candidate in ("/var/run/vpncli-helper.path", os.path.expanduser("~/.vpncli-helper.path")):
+        try:
+            with open(candidate, "r", encoding="utf-8") as handle:
+                path = handle.read().strip()
+            if path and os.path.exists(path):
+                return path
+        except OSError:
+            continue
+    for candidate in ("/var/run/vpncli-helper.sock", "/tmp/vpncli-helper.sock"):
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _run_via_helper(args: List[str]) -> Optional[Tuple[int, str]]:
+    path = _helper_socket_path()
+    if path is None:
+        return None
+    if sys.platform == "win32":
+        return None  # named pipes not implemented yet
+    import socket as _socket
+
+    env = _environment()
+    command = [sys.executable, "-m", "vpncli"] + list(args)
+    req = {"cmd": "run", "argv": command, "env": env}
+    try:
+        sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        sock.settimeout(300)
+        sock.connect(path)
+        sock.sendall((json.dumps(req) + "\\n").encode("utf-8"))
+        data = b""
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                break
+            data += chunk
+        sock.close()
+    except (OSError, socket.error):
+        return None
+    try:
+        resp = json.loads(data.decode("utf-8", "replace"))
+    except (ValueError, TypeError):
+        return None
+    if not resp.get("ok"):
+        return 1, resp.get("error", "helper error")
+    return int(resp.get("code", 1)), resp.get("stdout", "")
+
+
 def run_elevated(args: List[str]) -> Tuple[int, str]:
+    # Prefer the persistent helper when available (no password prompt).
+    helper_result = _run_via_helper(args)
+    if helper_result is not None:
+        return helper_result
+
     command = [sys.executable, "-m", "vpncli"] + list(args)
     env = _environment()
 

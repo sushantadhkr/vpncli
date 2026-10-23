@@ -557,6 +557,63 @@ def cmd_tray(args: argparse.Namespace, store: ProfileStore) -> int:
     return tray.main()
 
 
+def cmd_install_helper(args: argparse.Namespace, store: ProfileStore) -> int:
+    from . import privilege, paths
+
+    # If not admin, elevate this same command.
+    if not privilege.is_admin():
+        code, output = privilege.run_elevated(["install-helper"])
+        if code != 0:
+            return fail(output or "could not install helper")
+        print(output or "helper installed")
+        return 0
+
+    # Running as root: install the launchd/systemd service.
+    import os
+    import sys
+    from pathlib import Path
+
+    if sys.platform == "darwin":
+        plist_path = Path("/Library/LaunchDaemons/com.vpncli.helper.plist")
+        python = sys.executable
+        plist = (
+            '<?xml version="1.0" encoding="UTF-8"?>\\n'
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+            '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\\n'
+            '<plist version="1.0"><dict>\\n'
+            "  <key>Label</key><string>com.vpncli.helper</string>\\n"
+            "  <key>ProgramArguments</key><array>\\n"
+            "    <string>%s</string><string>-m</string><string>vpncli.helper</string>"
+            "<string>--foreground</string>\\n"
+            "  </array>\\n"
+            "  <key>RunAtLoad</key><true/>\\n"
+            "  <key>KeepAlive</key><true/>\\n"
+            "  <key>StandardOutPath</key><string>/var/log/vpncli-helper.log</string>\\n"
+            "  <key>StandardErrorPath</key><string>/var/log/vpncli-helper.log</string>\\n"
+            "</dict></plist>\\n" % python
+        )
+        plist_path.write_text(plist, encoding="utf-8")
+        os.chmod(str(plist_path), 0o644)
+        subprocess.run(["launchctl", "load", "-w", str(plist_path)], check=False)
+        print("installed helper to %s" % plist_path)
+        return 0
+    if sys.platform.startswith("linux"):
+        unit_path = Path("/etc/systemd/system/vpncli-helper.service")
+        python = sys.executable
+        unit = (
+            "[Unit]\\nDescription=vpncli privileged helper\\nAfter=network.target\\n\\n"
+            "[Service]\\nType=simple\\nExecStart=%s -m vpncli.helper --foreground\\n"
+            "Restart=always\\nRestartSec=2\\n\\n"
+            "[Install]\\nWantedBy=multi-user.target\\n" % python
+        )
+        unit_path.write_text(unit, encoding="utf-8")
+        subprocess.run(["systemctl", "daemon-reload"], check=False)
+        subprocess.run(["systemctl", "enable", "--now", "vpncli-helper"], check=False)
+        print("installed helper to %s" % unit_path)
+        return 0
+    return fail("helper install not yet supported on this platform")
+
+
 def cmd_update(args: argparse.Namespace, store: ProfileStore) -> int:
     session = runtime.active_session()
     if session is not None and args.disconnect:
@@ -740,6 +797,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = commands.add_parser("tray", help="start the system tray status icon")
     sub.set_defaults(func=cmd_tray)
+
+    sub = commands.add_parser("install-helper", help="install the privileged helper daemon (requires admin)")
+    sub.set_defaults(func=cmd_install_helper)
 
     sub = commands.add_parser(
         "update", help="update vpncli and the tray icon in place from GitHub"

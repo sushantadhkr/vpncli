@@ -89,8 +89,41 @@ def last_line(text: str) -> str:
     return lines[-1][:200] if lines else "no details available"
 
 
+def promote_to_ui_element() -> None:
+    """Make this process a macOS menu-bar-only (UIElement) app."""
+    if sys.platform != "darwin":
+        return
+    try:
+        import ctypes
+        from ctypes import Structure, c_uint32
+
+        class ProcessSerialNumber(Structure):
+            _fields_ = [("highLongOfPSN", c_uint32), ("lowLongOfPSN", c_uint32)]
+
+        carbon = ctypes.CDLL("/System/Library/Frameworks/Carbon.framework/Carbon")
+        get_current = carbon.GetCurrentProcess
+        get_current.argtypes = [ctypes.POINTER(ProcessSerialNumber)]
+        get_current.restype = c_int32
+        transform = carbon.TransformProcessType
+        transform.argtypes = [ctypes.POINTER(ProcessSerialNumber), c_uint32]
+        transform.restype = c_int32
+        psn = ProcessSerialNumber()
+        if get_current(ctypes.byref(psn)) == 0:
+            transform(ctypes.byref(psn), 4)
+    except Exception:
+        pass
+    try:
+        import AppKit
+
+        AppKit.NSApp.setActivationPolicy_(1)
+    except Exception:
+        pass
+
+
 class TrayApp:
     def __init__(self) -> None:
+        if sys.platform == "darwin":
+            promote_to_ui_element()
         import pystray
 
         self.pystray = pystray
@@ -316,8 +349,33 @@ class TrayApp:
             self.stop_event.wait(POLL_SECONDS)
 
     def setup(self, icon) -> None:
-        icon.visible = True
+        try:
+            icon.visible = True
+        except Exception as exc:
+            print("vpncli tray: could not show icon: %s" % exc, file=sys.stderr)
         threading.Thread(target=self.poll, daemon=True).start()
+        if sys.platform == "darwin":
+            promote_to_ui_element()
+            try:
+                import AppKit
+                import objc
+
+                class _PolicySetter(AppKit.NSObject):
+                    @objc.namedSelector(b"apply:")
+                    def apply_(self, _sender):
+                        try:
+                            AppKit.NSApp.setActivationPolicy_(1)
+                            AppKit.NSApp.activateIgnoringOtherApps_(True)
+                        except Exception:
+                            pass
+
+                setter = _PolicySetter.alloc().init()
+                setter.performSelectorOnMainThread_withObject_waitUntilDone_(
+                    "apply:", None, False
+                )
+                self._policy_setter = setter
+            except Exception:
+                pass
 
     def run(self) -> None:
         self.icon.run(self.setup)

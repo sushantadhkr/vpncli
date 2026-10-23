@@ -577,34 +577,40 @@ def cmd_install_helper(args: argparse.Namespace, store: ProfileStore) -> int:
         plist_path = Path("/Library/LaunchDaemons/com.vpncli.helper.plist")
         python = sys.executable
         plist = (
-            '<?xml version="1.0" encoding="UTF-8"?>\\n'
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
-            '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\\n'
-            '<plist version="1.0"><dict>\\n'
-            "  <key>Label</key><string>com.vpncli.helper</string>\\n"
-            "  <key>ProgramArguments</key><array>\\n"
+            '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+            '<plist version="1.0"><dict>\n'
+            "  <key>Label</key><string>com.vpncli.helper</string>\n"
+            "  <key>ProgramArguments</key><array>\n"
             "    <string>%s</string><string>-m</string><string>vpncli.helper</string>"
-            "<string>--foreground</string>\\n"
-            "  </array>\\n"
-            "  <key>RunAtLoad</key><true/>\\n"
-            "  <key>KeepAlive</key><true/>\\n"
-            "  <key>StandardOutPath</key><string>/var/log/vpncli-helper.log</string>\\n"
-            "  <key>StandardErrorPath</key><string>/var/log/vpncli-helper.log</string>\\n"
-            "</dict></plist>\\n" % python
+            "<string>--foreground</string>\n"
+            "  </array>\n"
+            "  <key>RunAtLoad</key><true/>\n"
+            "  <key>KeepAlive</key><true/>\n"
+            "  <key>StandardOutPath</key><string>/var/log/vpncli-helper.log</string>\n"
+            "  <key>StandardErrorPath</key><string>/var/log/vpncli-helper.log</string>\n"
+            "</dict></plist>\n" % python
         )
         plist_path.write_text(plist, encoding="utf-8")
         os.chmod(str(plist_path), 0o644)
-        subprocess.run(["launchctl", "load", "-w", str(plist_path)], check=False)
+        # Modern macOS prefers bootstrap; fall back to load for older versions.
+        result = subprocess.run(
+            ["launchctl", "bootstrap", "system", str(plist_path)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            subprocess.run(["launchctl", "load", "-w", str(plist_path)], check=False)
         print("installed helper to %s" % plist_path)
         return 0
     if sys.platform.startswith("linux"):
         unit_path = Path("/etc/systemd/system/vpncli-helper.service")
         python = sys.executable
         unit = (
-            "[Unit]\\nDescription=vpncli privileged helper\\nAfter=network.target\\n\\n"
-            "[Service]\\nType=simple\\nExecStart=%s -m vpncli.helper --foreground\\n"
-            "Restart=always\\nRestartSec=2\\n\\n"
-            "[Install]\\nWantedBy=multi-user.target\\n" % python
+            "[Unit]\nDescription=vpncli privileged helper\nAfter=network.target\n\n"
+            "[Service]\nType=simple\nExecStart=%s -m vpncli.helper --foreground\n"
+            "Restart=always\nRestartSec=2\n\n"
+            "[Install]\nWantedBy=multi-user.target\n" % python
         )
         unit_path.write_text(unit, encoding="utf-8")
         subprocess.run(["systemctl", "daemon-reload"], check=False)

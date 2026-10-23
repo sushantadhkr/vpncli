@@ -58,6 +58,25 @@ def run_elevated(args: List[str]) -> Tuple[int, str]:
         return result.returncode, result.stdout or ""
 
     if sys.platform == "darwin":
+        # Prefer passwordless sudo when available (one-time sudoers rule),
+        # so connects don't prompt. Fall back to the osascript dialog.
+        try:
+            probe = subprocess.run(
+                ["sudo", "-n", "true"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if probe.returncode == 0:
+                assignments = ["%s=%s" % item for item in env.items()]
+                result = subprocess.run(
+                    ["sudo", "-n", "env"] + assignments + command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                )
+                return result.returncode, result.stdout or ""
+        except OSError:
+            pass
         assignments = " ".join("%s=%s" % (k, shlex.quote(v)) for k, v in env.items())
         inner = "env %s %s" % (assignments, " ".join(shlex.quote(c) for c in command))
         script = 'do shell script "%s" with administrator privileges' % _applescript_quote(inner)

@@ -314,13 +314,65 @@ class TrayApp:
         except Exception:
             pass
 
+    def _run_on_main(self, func) -> None:
+        """Run ``func`` on the macOS main thread.
+
+        pystray's icon/menu objects are not safe to touch from worker
+        threads; doing so (which the original code did) crashes the process
+        on macOS, which is what made the tray vanish when connecting.
+        """
+        if sys.platform != "darwin":
+            try:
+                func()
+            except Exception as exc:
+                print("vpncli tray: ui update failed: %s" % exc, file=sys.stderr)
+            return
+        try:
+            import AppKit
+            import objc
+
+            class _Runner(AppKit.NSObject):
+                def initWithFunc_(self, func):
+                    self = super().init()
+                    if self is None:
+                        return None
+                    self._func = func
+                    return self
+
+                @objc.namedSelector(b"run:")
+                def run_(self, _sender):
+                    try:
+                        self._func()
+                    except Exception as exc:
+                        print("vpncli tray: ui update failed: %s" % exc, file=sys.stderr)
+
+            runner = _Runner.alloc().initWithFunc_(func)
+            if runner is None:
+                func()
+                return
+            runner.performSelectorOnMainThread_withObject_waitUntilDone_(
+                "run:", None, False
+            )
+            # Keep a reference so the runner survives until it runs.
+            self._ui_runners = getattr(self, "_ui_runners", [])
+            self._ui_runners.append(runner)
+            # Prune completed runners to avoid unbounded growth.
+            if len(self._ui_runners) > 64:
+                self._ui_runners = self._ui_runners[-32:]
+        except Exception as exc:
+            print("vpncli tray: dispatch failed: %s" % exc, file=sys.stderr)
+            try:
+                func()
+            except Exception:
+                pass
+
     def run_task(self, label: str, args) -> None:
         if self.busy:
             return
 
         def worker() -> None:
             self.busy = True
-            self.icon.update_menu()
+            self._run_on_main(lambda: self.icon.update_menu())
             try:
                 code, output = privilege.run_elevated(list(args))
                 if code != 0:
@@ -338,10 +390,19 @@ class TrayApp:
             return
         changed = status.state != self.status.state or status.profile != self.status.profile
         self.status = status
-        self.icon.icon = self.icon_for(status.state)
-        self.icon.title = self.title()
-        if changed:
-            self.icon.update_menu()
+        new_icon = self.icon_for(status.state)
+        new_title = self.title()
+
+        def apply() -> None:
+            try:
+                self.icon.icon = new_icon
+                self.icon.title = new_title
+                if changed:
+                    self.icon.update_menu()
+            except Exception as exc:
+                print("vpncli tray: refresh ui failed: %s" % exc, file=sys.stderr)
+
+        self._run_on_main(apply)
 
     def poll(self) -> None:
         while not self.stop_event.is_set():
@@ -349,10 +410,7 @@ class TrayApp:
             self.stop_event.wait(POLL_SECONDS)
 
     def setup(self, icon) -> None:
-        try:
-            icon.visible = True
-        except Exception as exc:
-            print("vpncli tray: could not show icon: %s" % exc, file=sys.stderr)
+        self._run_on_main(lambda: setattr(icon, "visible", True))
         threading.Thread(target=self.poll, daemon=True).start()
         if sys.platform == "darwin":
             promote_to_ui_element()

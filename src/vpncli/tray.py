@@ -89,6 +89,34 @@ def last_line(text: str) -> str:
     return lines[-1][:200] if lines else "no details available"
 
 
+# macOS main-thread dispatcher helper. Defined once at import time so PyObjC
+# does not complain about redefining an Objective-C subclass on every call.
+_UI_RUNNER_CLASS = None
+if sys.platform == "darwin":
+    try:
+        import AppKit
+        import objc
+
+        class _Runner(AppKit.NSObject):
+            def initWithFunc_(self, func):
+                self = objc.super(_Runner, self).init()
+                if self is None:
+                    return None
+                self._func = func
+                return self
+
+            @objc.namedSelector(b"run:")
+            def run_(self, _sender):
+                try:
+                    self._func()
+                except Exception as exc:
+                    print("vpncli tray: ui update failed: %s" % exc, file=sys.stderr)
+
+        _UI_RUNNER_CLASS = _Runner
+    except Exception:
+        _UI_RUNNER_CLASS = None
+
+
 def promote_to_ui_element() -> None:
     """Make this process a macOS menu-bar-only (UIElement) app."""
     if sys.platform != "darwin":
@@ -327,26 +355,15 @@ class TrayApp:
             except Exception as exc:
                 print("vpncli tray: ui update failed: %s" % exc, file=sys.stderr)
             return
+        Runner = _UI_RUNNER_CLASS
+        if Runner is None:
+            try:
+                func()
+            except Exception as exc:
+                print("vpncli tray: ui update failed: %s" % exc, file=sys.stderr)
+            return
         try:
-            import AppKit
-            import objc
-
-            class _Runner(AppKit.NSObject):
-                def initWithFunc_(self, func):
-                    self = super().init()
-                    if self is None:
-                        return None
-                    self._func = func
-                    return self
-
-                @objc.namedSelector(b"run:")
-                def run_(self, _sender):
-                    try:
-                        self._func()
-                    except Exception as exc:
-                        print("vpncli tray: ui update failed: %s" % exc, file=sys.stderr)
-
-            runner = _Runner.alloc().initWithFunc_(func)
+            runner = Runner.alloc().initWithFunc_(func)
             if runner is None:
                 func()
                 return
@@ -356,7 +373,6 @@ class TrayApp:
             # Keep a reference so the runner survives until it runs.
             self._ui_runners = getattr(self, "_ui_runners", [])
             self._ui_runners.append(runner)
-            # Prune completed runners to avoid unbounded growth.
             if len(self._ui_runners) > 64:
                 self._ui_runners = self._ui_runners[-32:]
         except Exception as exc:

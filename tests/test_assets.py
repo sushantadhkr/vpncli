@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -136,17 +137,25 @@ class LauncherMarkerTests(unittest.TestCase):
                  mock.patch.object(assets, "_macos_target", return_value=bundle), \
                  mock.patch("subprocess.Popen"):
                 assets.launch_macos_app()
-            self.assertIn("VPNCLI_TRAY_LAUNCHED=1", launcher.read_text(encoding="utf-8"))
+            script = bundle / "Contents" / "MacOS" / "vpncli-tray.sh"
+            target = script if script.is_file() else launcher
+            self.assertIn("VPNCLI_TRAY_LAUNCHED=1", target.read_text(encoding="utf-8"))
 
     def test_current_launcher_is_left_alone(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             applications = home / "Applications"
             bundle = applications / "vpncli.app"
+            binary = assets.launcher_binary()
+            if binary is None:
+                self.skipTest("launcher binary not shipped")
             launcher = bundle / "Contents" / "MacOS" / "vpncli-tray"
+            script = bundle / "Contents" / "MacOS" / "vpncli-tray.sh"
             launcher.parent.mkdir(parents=True)
-            launcher.write_text(assets.macos_launcher_text(), encoding="utf-8")
+            shutil.copy2(str(binary), str(launcher))
+            script.write_text(assets.macos_launcher_text(), encoding="utf-8")
             launcher.chmod(0o644)
+            script.chmod(0o644)
             with mock.patch.object(assets, "MACOS_APPLICATIONS", (applications,)), \
                  mock.patch.object(assets.sys, "platform", "darwin"), \
                  mock.patch.object(assets, "_macos_target", return_value=bundle), \

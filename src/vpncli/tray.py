@@ -362,12 +362,36 @@ class TrayApp:
             self.stop_event.wait(POLL_SECONDS)
 
     def setup(self, icon) -> None:
-        icon.visible = True
+        try:
+            icon.visible = True
+        except Exception as exc:
+            print("vpncli tray: could not show icon: %s" % exc, file=sys.stderr)
         threading.Thread(target=self.poll, daemon=True).start()
-        # macOS: keep the promotion (already done in run(), but repeat here
-        # in case the pre-run call was dropped on macOS 13-15).
         if sys.platform == "darwin":
             promote_to_ui_element()
+            # Deferred AppKit promotion: setting the policy before the run
+            # loop starts is dropped on macOS 13-15, so schedule it on the
+            # main thread to land once the run loop is actually running.
+            try:
+                import AppKit
+                import objc
+
+                class _PolicySetter(AppKit.NSObject):
+                    @objc.namedSelector(b"apply:")
+                    def apply_(self, _sender):
+                        try:
+                            AppKit.NSApp.setActivationPolicy_(1)  # Accessory
+                            AppKit.NSApp.activateIgnoringOtherApps_(True)
+                        except Exception:
+                            pass
+
+                setter = _PolicySetter.alloc().init()
+                setter.performSelectorOnMainThread_withObject_waitUntilDone_(
+                    "apply:", None, False
+                )
+                self._policy_setter = setter
+            except Exception:
+                pass
 
     def run(self) -> None:
         if sys.platform == "darwin":
@@ -416,6 +440,10 @@ def main() -> int:
         assets.register()
     except Exception:
         pass
+    # macOS: promote to a UIElement app as early as possible, before any
+    # Cocoa/AppKit usage, so the status item renders and no Dock icon shows.
+    if sys.platform == "darwin":
+        promote_to_ui_element()
     # Hand over to the app bundle so macOS shows vpncli rather than Python
     # in the menu bar, Activity Monitor and Login Items.
     if sys.platform == "darwin" and not os.environ.get("VPNCLI_TRAY_LAUNCHED"):

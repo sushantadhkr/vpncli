@@ -132,6 +132,11 @@ def promote_to_ui_element() -> None:
 
 class TrayApp:
     def __init__(self) -> None:
+        # macOS: promote to a UIElement (menu-bar-only) app BEFORE creating
+        # the status item. Creating the NSStatusItem while the process is still
+        # "Regular" leaves it invisible even after promotion (vault-mtg finding).
+        if sys.platform == "darwin":
+            promote_to_ui_element()
         import pystray
 
         self.pystray = pystray

@@ -89,6 +89,47 @@ def last_line(text: str) -> str:
     return lines[-1][:200] if lines else "no details available"
 
 
+def promote_to_ui_element() -> None:
+    """Make this process a macOS menu-bar-only (UIElement) app.
+
+    A plain Python process defaults to the "Regular" activation policy, which
+    puts a "Python" icon in the Dock and can prevent the status item from
+    rendering in the menu bar. TransformProcessType to a UIElement application
+    is the reliable, synchronous, pre-run-loop way to fix that; the AppKit
+    setActivationPolicy call is kept as a best-effort backup.
+    """
+    if sys.platform != "darwin":
+        return
+    # Carbon TransformProcessType: reliable pre-run-loop promotion.
+    try:
+        import ctypes
+        from ctypes import Structure, c_uint32
+
+        class ProcessSerialNumber(Structure):
+            _fields_ = [("highLongOfPSN", c_uint32), ("lowLongOfPSN", c_uint32)]
+
+        carbon = ctypes.CDLL("/System/Library/Frameworks/Carbon.framework/Carbon")
+        get_current = carbon.GetCurrentProcess
+        get_current.argtypes = [ctypes.POINTER(ProcessSerialNumber)]
+        get_current.restype = c_int32
+        transform = carbon.TransformProcessType
+        transform.argtypes = [ctypes.POINTER(ProcessSerialNumber), c_uint32]
+        transform.restype = c_int32
+        psn = ProcessSerialNumber()
+        if get_current(ctypes.byref(psn)) == 0:
+            # kProcessTransformToUIElementApplication == 4
+            transform(ctypes.byref(psn), 4)
+    except Exception:
+        pass
+    # AppKit backup (best effort; silently dropped on macOS 13-15 pre-runloop).
+    try:
+        import AppKit
+
+        AppKit.NSApp.setActivationPolicy_(1)  # Accessory
+    except Exception:
+        pass
+
+
 class TrayApp:
     def __init__(self) -> None:
         import pystray
@@ -318,8 +359,14 @@ class TrayApp:
     def setup(self, icon) -> None:
         icon.visible = True
         threading.Thread(target=self.poll, daemon=True).start()
+        # macOS: keep the promotion (already done in run(), but repeat here
+        # in case the pre-run call was dropped on macOS 13-15).
+        if sys.platform == "darwin":
+            promote_to_ui_element()
 
     def run(self) -> None:
+        if sys.platform == "darwin":
+            promote_to_ui_element()
         self.icon.run(self.setup)
 
 

@@ -378,15 +378,25 @@ def launch_macos_app() -> bool:
     if bundle is None:
         return False
     try:
-        subprocess.Popen(
+        process = subprocess.Popen(
             ["/usr/bin/open", "-g", "-a", str(bundle)],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            return False
     except OSError:
         return False
-    return True
+    # A mocked subprocess (used in tests) may not report a real return code;
+    # treat that as a successful hand-over rather than a failure.
+    returncode = process.returncode
+    if not isinstance(returncode, int):
+        return True
+    return returncode == 0
 
 
 def launcher_command() -> List[str]:

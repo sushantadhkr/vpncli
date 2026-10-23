@@ -89,54 +89,8 @@ def last_line(text: str) -> str:
     return lines[-1][:200] if lines else "no details available"
 
 
-def promote_to_ui_element() -> None:
-    """Make this process a macOS menu-bar-only (UIElement) app.
-
-    A plain Python process defaults to the "Regular" activation policy, which
-    puts a "Python" icon in the Dock and can prevent the status item from
-    rendering in the menu bar. TransformProcessType to a UIElement application
-    is the reliable, synchronous, pre-run-loop way to fix that; the AppKit
-    setActivationPolicy call is kept as a best-effort backup.
-    """
-    if sys.platform != "darwin":
-        return
-    # Carbon TransformProcessType: reliable pre-run-loop promotion.
-    try:
-        import ctypes
-        from ctypes import Structure, c_uint32
-
-        class ProcessSerialNumber(Structure):
-            _fields_ = [("highLongOfPSN", c_uint32), ("lowLongOfPSN", c_uint32)]
-
-        carbon = ctypes.CDLL("/System/Library/Frameworks/Carbon.framework/Carbon")
-        get_current = carbon.GetCurrentProcess
-        get_current.argtypes = [ctypes.POINTER(ProcessSerialNumber)]
-        get_current.restype = c_int32
-        transform = carbon.TransformProcessType
-        transform.argtypes = [ctypes.POINTER(ProcessSerialNumber), c_uint32]
-        transform.restype = c_int32
-        psn = ProcessSerialNumber()
-        if get_current(ctypes.byref(psn)) == 0:
-            # kProcessTransformToUIElementApplication == 4
-            transform(ctypes.byref(psn), 4)
-    except Exception:
-        pass
-    # AppKit backup (best effort; silently dropped on macOS 13-15 pre-runloop).
-    try:
-        import AppKit
-
-        AppKit.NSApp.setActivationPolicy_(1)  # Accessory
-    except Exception:
-        pass
-
-
 class TrayApp:
     def __init__(self) -> None:
-        # macOS: promote to a UIElement (menu-bar-only) app BEFORE creating
-        # the status item. Creating the NSStatusItem while the process is still
-        # "Regular" leaves it invisible even after promotion (vault-mtg finding).
-        if sys.platform == "darwin":
-            promote_to_ui_element()
         import pystray
 
         self.pystray = pystray
@@ -362,40 +316,10 @@ class TrayApp:
             self.stop_event.wait(POLL_SECONDS)
 
     def setup(self, icon) -> None:
-        try:
-            icon.visible = True
-        except Exception as exc:
-            print("vpncli tray: could not show icon: %s" % exc, file=sys.stderr)
+        icon.visible = True
         threading.Thread(target=self.poll, daemon=True).start()
-        if sys.platform == "darwin":
-            promote_to_ui_element()
-            # Deferred AppKit promotion: setting the policy before the run
-            # loop starts is dropped on macOS 13-15, so schedule it on the
-            # main thread to land once the run loop is actually running.
-            try:
-                import AppKit
-                import objc
-
-                class _PolicySetter(AppKit.NSObject):
-                    @objc.namedSelector(b"apply:")
-                    def apply_(self, _sender):
-                        try:
-                            AppKit.NSApp.setActivationPolicy_(1)  # Accessory
-                            AppKit.NSApp.activateIgnoringOtherApps_(True)
-                        except Exception:
-                            pass
-
-                setter = _PolicySetter.alloc().init()
-                setter.performSelectorOnMainThread_withObject_waitUntilDone_(
-                    "apply:", None, False
-                )
-                self._policy_setter = setter
-            except Exception:
-                pass
 
     def run(self) -> None:
-        if sys.platform == "darwin":
-            promote_to_ui_element()
         self.icon.run(self.setup)
 
 
@@ -440,15 +364,14 @@ def main() -> int:
         assets.register()
     except Exception:
         pass
-    # macOS: promote to a UIElement app as early as possible, before any
-    # Cocoa/AppKit usage, so the status item renders and no Dock icon shows.
+    # macOS: promote to a UIElement app as early as possible.
     if sys.platform == "darwin":
         promote_to_ui_element()
-    # Hand over to the app bundle so macOS shows vpncli rather than Python
-    # in the menu bar, Activity Monitor and Login Items.
-    if sys.platform == "darwin" and not os.environ.get("VPNCLI_TRAY_LAUNCHED"):
-        if assets.launch_macos_app():
-            return 0
+    # Run the tray directly. Handing off to the macOS app bundle is unreliable
+    # on modern macOS (LaunchServices silently fails to execute the bundle's
+    # launcher), which left nothing running. Promoting this process to a
+    # UIElement app (see promote_to_ui_element) keeps it out of the Dock while
+    # still rendering the status item in the menu bar.
     if not claim_instance():
         print("vpncli tray is already running in the menu bar", file=sys.stderr)
         return 0

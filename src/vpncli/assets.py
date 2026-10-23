@@ -64,17 +64,6 @@ def icon_icns() -> Optional[Path]:
     return asset("vpncli.icns")
 
 
-def launcher_binary() -> Optional[Path]:
-    """The Mach-O launcher stub, if shipped with this installation.
-
-    LaunchServices does not reliably execute a shell script used directly as
-    ``CFBundleExecutable`` (it silently fails with error -54 on modern macOS),
-    so a real Mach-O stub is preferred. When it is unavailable we fall back to
-    the legacy shell-script bundle.
-    """
-    return asset("vpncli-tray-launcher")
-
-
 def has_artwork() -> bool:
     return icon_png() is not None
 
@@ -147,39 +136,14 @@ def install_macos() -> Optional[Path]:
         directory.mkdir(parents=True, exist_ok=True)
 
     launcher = macos / ("%s-tray" % APP_NAME)
-    script_path = macos / ("%s-tray.sh" % APP_NAME)
-    launcher_text = macos_launcher_text()
-    binary = launcher_binary()
-    if binary is not None:
-        # Real Mach-O stub: LaunchServices can execute it, and it hands off
-        # to the shell script next to it. This avoids the silent -54 failure
-        # that shell scripts hit when used directly as CFBundleExecutable.
-        try:
-            if not launcher.is_file() or launcher.read_bytes() != binary.read_bytes():
-                shutil.copy2(str(binary), str(launcher))
-                launcher.chmod(0o755)
-        except OSError:
-            shutil.copy2(str(binary), str(launcher))
-            launcher.chmod(0o755)
-        # Keep the shell script as the text the launcher runs.
-        current_script = None
-        try:
-            current_script = script_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            pass
-        if current_script != launcher_text:
-            script_path.write_text(launcher_text, encoding="utf-8")
-            script_path.chmod(0o755)
-    else:
-        # Legacy fallback: shell script used directly as the executable.
-        current = None
-        try:
-            current = launcher.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            pass
-        if current != launcher_text:
-            launcher.write_text(launcher_text, encoding="utf-8")
-            launcher.chmod(0o755)
+    current = None
+    try:
+        current = launcher.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        pass
+    if current != macos_launcher_text():
+        launcher.write_text(macos_launcher_text(), encoding="utf-8")
+        launcher.chmod(0o755)
     if icns is not None:
         shutil.copy2(str(icns), str(resources / ("%s.icns" % APP_NAME)))
 
@@ -378,16 +342,13 @@ def macos_app() -> Optional[Path]:
         return None
     for folder in MACOS_APPLICATIONS:
         bundle = folder / ("%s.app" % APP_NAME)
+        launcher = bundle / "Contents" / "MacOS" / ("%s-tray" % APP_NAME)
         if not bundle.is_dir():
             continue
-        launcher = bundle / "Contents" / "MacOS" / ("%s-tray" % APP_NAME)
-        # New style: Mach-O stub plus a sibling shell script.
-        script_path = bundle / "Contents" / "MacOS" / ("%s-tray.sh" % APP_NAME)
-        text_file = script_path if script_path.is_file() else launcher
         try:
             if not os.access(str(launcher), os.X_OK):
                 continue
-            script = text_file.read_text(encoding="utf-8", errors="replace")
+            script = launcher.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         quoted = re.findall(r'"([^"]+)"', script)
@@ -417,25 +378,15 @@ def launch_macos_app() -> bool:
     if bundle is None:
         return False
     try:
-        process = subprocess.Popen(
+        subprocess.Popen(
             ["/usr/bin/open", "-g", "-a", str(bundle)],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            return False
     except OSError:
         return False
-    # A mocked subprocess (used in tests) may not report a real return code;
-    # treat that as a successful hand-over rather than a failure.
-    returncode = process.returncode
-    if not isinstance(returncode, int):
-        return True
-    return returncode == 0
+    return True
 
 
 def launcher_command() -> List[str]:

@@ -1,5 +1,4 @@
 import os
-import shutil
 import sys
 import tempfile
 import unittest
@@ -127,7 +126,6 @@ class LauncherMarkerTests(unittest.TestCase):
             applications = home / "Applications"
             bundle = applications / "vpncli.app"
             launcher = bundle / "Contents" / "MacOS" / "vpncli-tray"
-            script = bundle / "Contents" / "MacOS" / "vpncli-tray.sh"
             launcher.parent.mkdir(parents=True)
             launcher.write_text(
                 '#!/bin/sh\nexec "%s" -m vpncli tray\n' % sys.executable, encoding="utf-8"
@@ -138,25 +136,17 @@ class LauncherMarkerTests(unittest.TestCase):
                  mock.patch.object(assets, "_macos_target", return_value=bundle), \
                  mock.patch("subprocess.Popen"):
                 assets.launch_macos_app()
-            # The rewritten marker lives in the shell script the launcher runs.
-            target = script if script.is_file() else launcher
-            self.assertIn("VPNCLI_TRAY_LAUNCHED=1", target.read_text(encoding="utf-8"))
+            self.assertIn("VPNCLI_TRAY_LAUNCHED=1", launcher.read_text(encoding="utf-8"))
 
     def test_current_launcher_is_left_alone(self):
-        binary = assets.launcher_binary()
-        if binary is None:
-            self.skipTest("launcher binary not shipped")
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             applications = home / "Applications"
             bundle = applications / "vpncli.app"
             launcher = bundle / "Contents" / "MacOS" / "vpncli-tray"
-            script = bundle / "Contents" / "MacOS" / "vpncli-tray.sh"
             launcher.parent.mkdir(parents=True)
-            shutil.copy2(str(binary), str(launcher))
-            script.write_text(assets.macos_launcher_text(), encoding="utf-8")
+            launcher.write_text(assets.macos_launcher_text(), encoding="utf-8")
             launcher.chmod(0o644)
-            script.chmod(0o644)
             with mock.patch.object(assets, "MACOS_APPLICATIONS", (applications,)), \
                  mock.patch.object(assets.sys, "platform", "darwin"), \
                  mock.patch.object(assets, "_macos_target", return_value=bundle), \
